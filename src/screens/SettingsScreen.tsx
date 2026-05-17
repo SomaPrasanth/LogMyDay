@@ -1,23 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { getApiKey, saveApiKey, deleteApiKey } from '../services/StorageService';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Modal, FlatList } from 'react-native';
+import { getApiKey, saveApiKey, deleteApiKey, getLanguagePreferences, saveLanguagePreferences } from '../services/StorageService';
 import { zip } from 'react-native-zip-archive';
 import RNFS from 'react-native-fs';
-import { Key, Trash2, Download, Shield, Info } from 'lucide-react-native';
+import { Key, Trash2, Download, Shield, Info, Languages, ChevronDown, Check } from 'lucide-react-native';
+
+const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'ta', name: 'Tamil' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'ru', name: 'Russian' },
+];
 
 const SettingsScreen = ({ navigation }) => {
   const [apiKey, setApiKey] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [spokenLang, setSpokenLang] = useState('en');
+  const [outputLang, setOutputLang] = useState('English');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activePicker, setActivePicker] = useState<'spoken' | 'output' | null>(null);
 
   useEffect(() => {
-    loadKey();
+    loadKeyAndPrefs();
   }, []);
 
-  const loadKey = async () => {
+  const loadKeyAndPrefs = async () => {
     const key = await getApiKey();
-    if (key) {
-      setApiKey(key);
+    if (key) setApiKey(key);
+    
+    const prefs = await getLanguagePreferences();
+    setSpokenLang(prefs.spokenLanguage);
+    setOutputLang(prefs.outputLanguage);
+  };
+
+  const handleLanguageSelect = async (lang: typeof LANGUAGES[0]) => {
+    if (activePicker === 'spoken') {
+      setSpokenLang(lang.code);
+      await saveLanguagePreferences(lang.code, outputLang);
+    } else if (activePicker === 'output') {
+      setOutputLang(lang.name);
+      await saveLanguagePreferences(spokenLang, lang.name);
     }
+    setModalVisible(false);
   };
 
   const handleUpdateKey = async () => {
@@ -115,6 +145,43 @@ const SettingsScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Language Preferences</Text>
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={styles.dropdownButton}
+            onPress={() => { setActivePicker('spoken'); setModalVisible(true); }}
+          >
+            <View style={styles.dropdownHeader}>
+              <Languages size={18} color="#94a3b8" />
+              <Text style={styles.label}>I will speak in</Text>
+            </View>
+            <View style={styles.dropdownValue}>
+              <Text style={styles.dropdownText}>
+                {LANGUAGES.find(l => l.code === spokenLang)?.name || 'English'}
+              </Text>
+              <ChevronDown size={18} color="#94a3b8" />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity 
+            style={styles.dropdownButton}
+            onPress={() => { setActivePicker('output'); setModalVisible(true); }}
+          >
+            <View style={styles.dropdownHeader}>
+              <Languages size={18} color="#94a3b8" />
+              <Text style={styles.label}>Save diary in</Text>
+            </View>
+            <View style={styles.dropdownValue}>
+              <Text style={styles.dropdownText}>{outputLang}</Text>
+              <ChevronDown size={18} color="#94a3b8" />
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Data Management</Text>
         <TouchableOpacity style={styles.actionCard} onPress={handleExportData}>
           <View style={styles.actionIcon}>
@@ -142,6 +209,43 @@ const SettingsScreen = ({ navigation }) => {
           </Text>
         </View>
       </View>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Select {activePicker === 'spoken' ? 'Spoken Language' : 'Output Language'}
+            </Text>
+            <FlatList
+              data={LANGUAGES}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }) => {
+                const isSelected = activePicker === 'spoken' ? spokenLang === item.code : outputLang === item.name;
+                return (
+                  <TouchableOpacity 
+                    style={styles.languageItem}
+                    onPress={() => handleLanguageSelect(item)}
+                  >
+                    <Text style={[styles.languageItemText, isSelected && styles.languageItemTextSelected]}>
+                      {item.name}
+                    </Text>
+                    {isSelected && <Check size={20} color="#38bdf8" />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 };
@@ -274,6 +378,68 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginLeft: 12,
     flex: 1,
+  },
+  dropdownButton: {
+    paddingVertical: 8,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dropdownValue: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  dropdownText: {
+    color: '#f8fafc',
+    fontSize: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginVertical: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    color: '#f8fafc',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  languageItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  languageItemText: {
+    color: '#94a3b8',
+    fontSize: 16,
+  },
+  languageItemTextSelected: {
+    color: '#38bdf8',
+    fontWeight: 'bold',
   },
 });
 

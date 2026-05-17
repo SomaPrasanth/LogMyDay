@@ -5,7 +5,7 @@ import { DayMoment, Entry } from '../models/Schema';
 import { Realm } from '@realm/react';
 import { startRecording, stopRecording, requestPermissions, startPlayback } from '../services/AudioService';
 import { transcribeAudio } from '../services/GroqService';
-import { getApiKey } from '../services/StorageService';
+import { getApiKey, getLanguagePreferences } from '../services/StorageService';
 import { Mic, MicOff, Settings as SettingsIcon, Play, Calendar } from 'lucide-react-native';
 
 const HomeScreen = ({ navigation }) => {
@@ -47,7 +47,9 @@ const HomeScreen = ({ navigation }) => {
         const audioPath = await stopRecording();
         
         const apiKey = await getApiKey();
-        const result = await transcribeAudio(apiKey, audioPath);
+        const prefs = await getLanguagePreferences();
+        
+        const result = await transcribeAudio(apiKey, audioPath, prefs.spokenLanguage, prefs.outputLanguage);
         
         saveEntry(result, audioPath);
       } catch (err) {
