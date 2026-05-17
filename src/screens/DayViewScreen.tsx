@@ -1,12 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRealm, useQuery } from '../models/Schema';
 import { DayMoment } from '../models/Schema';
 import { startPlayback } from '../services/AudioService';
-import { Play, Calendar, Image as ImageIcon } from 'lucide-react-native';
+import RNFS from 'react-native-fs';
+import { Play, Calendar, Image as ImageIcon, Trash2 } from 'lucide-react-native';
 
 const DayViewScreen = ({ route, navigation }) => {
   const { date } = route.params;
+  const realm = useRealm();
   
   // Use a query to get live updates for this day
   const dayMoment = useQuery(DayMoment).filtered(`date == "${date}"`)[0];
@@ -17,18 +19,74 @@ const DayViewScreen = ({ route, navigation }) => {
     });
   }, [navigation, date]);
 
+  const handleDeleteEntry = (entry) => {
+    Alert.alert(
+      'Delete Moment',
+      'Are you sure you want to delete this moment? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete audio file if exists
+              if (entry.audioPath) {
+                const path = entry.audioPath.replace('file://', '');
+                const exists = await RNFS.exists(path);
+                if (exists) {
+                  await RNFS.unlink(path);
+                }
+              }
+              // Delete image file if exists
+              if (entry.imagePath) {
+                const path = entry.imagePath.replace('file://', '');
+                const exists = await RNFS.exists(path);
+                if (exists) {
+                  await RNFS.unlink(path);
+                }
+              }
+              
+              // Delete from Realm
+              realm.write(() => {
+                realm.delete(entry);
+              });
+              
+              // If no entries left, maybe we should delete the DayMoment too or just leave it empty.
+              // Leaving it empty is fine, or we could delete it if dayMoment.entries.length === 0.
+              if (dayMoment && dayMoment.entries.length === 0) {
+                  realm.write(() => {
+                      realm.delete(dayMoment);
+                  });
+                  navigation.goBack();
+              }
+            } catch (error) {
+              console.error('Error deleting entry:', error);
+              Alert.alert('Error', 'Failed to delete the moment.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderEntry = ({ item }) => (
     <View style={styles.entryCard}>
       <View style={styles.entryHeader}>
         <Text style={styles.entryTime}>
           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        {item.audioPath && (
-          <TouchableOpacity onPress={() => startPlayback(item.audioPath)} style={styles.playButton}>
-            <Play size={18} color="#0f172a" fill="#0f172a" />
-            <Text style={styles.playText}>Play</Text>
+        <View style={styles.headerActions}>
+          {item.audioPath && (
+            <TouchableOpacity onPress={() => startPlayback(item.audioPath)} style={styles.playButton}>
+              <Play size={16} color="#0f172a" fill="#0f172a" />
+              <Text style={styles.playText}>Play</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => handleDeleteEntry(item)} style={styles.deleteButton}>
+            <Trash2 size={18} color="#ef4444" />
           </TouchableOpacity>
-        )}
+        </View>
       </View>
       
       <Text style={styles.transcript}>{item.transcript}</Text>
@@ -115,6 +173,14 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 14,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    marginLeft: 12,
+    padding: 4,
   },
   playButton: {
     flexDirection: 'row',
