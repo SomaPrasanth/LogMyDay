@@ -4,7 +4,8 @@ export class Entry extends Realm.Object<Entry> {
   _id!: Realm.BSON.UUID;
   timestamp!: Date;
   transcript!: string;
-  audioPath!: string;
+  audioPath?: string;
+  imagePath?: string;
   mood?: string;
   dayMoment!: DayMoment[];
 
@@ -15,7 +16,8 @@ export class Entry extends Realm.Object<Entry> {
       _id: 'uuid',
       timestamp: 'date',
       transcript: 'string',
-      audioPath: 'string',
+      audioPath: 'string?',
+      imagePath: 'string?',
       mood: 'string?',
       dayMoment: {
         type: 'linkingObjects',
@@ -45,4 +47,5 @@ export class DayMoment extends Realm.Object<DayMoment> {
 
 export const { RealmProvider, useRealm, useQuery, useObject } = createRealmContext({
   schema: [Entry, DayMoment],
+  schemaVersion: 1,
 });

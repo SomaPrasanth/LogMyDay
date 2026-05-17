@@ -51,7 +51,11 @@ const HomeScreen = ({ navigation }) => {
         
         const result = await transcribeAudio(apiKey, audioPath, prefs.spokenLanguage, prefs.outputLanguage);
         
-        saveEntry(result, audioPath);
+        navigation.navigate('ReviewEntry', {
+          transcript: result.transcript,
+          summary: result.daily_summary,
+          audioPath: audioPath
+        });
       } catch (err) {
         Alert.alert('Processing Error', err.message || 'Failed to transcribe audio.');
       } finally {
@@ -60,61 +64,20 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const saveEntry = (result, audioPath) => {
-    const today = new Date().toISOString().split('T')[0];
-    
-    realm.write(() => {
-      let dayMoment = realm.objectForPrimaryKey('DayMoment', today);
-      if (!dayMoment) {
-        dayMoment = realm.create('DayMoment', {
-          date: today,
-          summary: result.daily_summary,
-          entries: [],
-        });
-      } else if (result.daily_summary) {
-        dayMoment.summary = result.daily_summary; // Update with latest summary
-      }
-
-      const entry = realm.create('Entry', {
-        _id: new Realm.BSON.UUID(),
-        timestamp: new Date(),
-        transcript: result.transcript,
-        audioPath: audioPath,
-        mood: result.daily_summary,
-      });
-
-      dayMoment.entries.push(entry);
-    });
-  };
-
-  const renderEntry = ({ item }) => (
-    <View style={styles.entryCard}>
-      <View style={styles.entryHeader}>
-        <Text style={styles.entryTime}>
-          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-        <TouchableOpacity onPress={() => startPlayback(item.audioPath)}>
-          <Play size={20} color="#38bdf8" />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.transcript}>{item.transcript}</Text>
-    </View>
-  );
-
   const renderDay = ({ item }) => (
-    <View style={styles.daySection}>
+    <TouchableOpacity 
+      style={styles.dayCard}
+      onPress={() => navigation.navigate('DayView', { date: item.date })}
+    >
       <View style={styles.dayHeader}>
         <Calendar size={18} color="#94a3b8" />
         <Text style={styles.dayDate}>{item.date === new Date().toISOString().split('T')[0] ? 'Today' : item.date}</Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{item.entries.length}</Text>
+        </View>
       </View>
-      {item.summary && <Text style={styles.daySummary}>{item.summary}</Text>}
-      <FlatList
-        data={item.entries}
-        renderItem={renderEntry}
-        keyExtractor={(entry) => entry._id.toString()}
-        scrollEnabled={false}
-      />
-    </View>
+      {item.summary && <Text style={styles.daySummary} numberOfLines={2}>{item.summary}</Text>}
+    </TouchableOpacity>
   );
 
   return (
@@ -170,13 +133,18 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
-  daySection: {
-    marginBottom: 32,
+  dayCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   dayDate: {
     color: '#94a3b8',
@@ -184,37 +152,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
     textTransform: 'uppercase',
-  },
-  daySummary: {
-    color: '#38bdf8',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    fontStyle: 'italic',
-  },
-  entryCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  entryTime: {
-    color: '#64748b',
-    fontSize: 12,
     flex: 1,
   },
-  transcript: {
+  badge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  badgeText: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  daySummary: {
     color: '#f8fafc',
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 24,
+    fontStyle: 'italic',
   },
   bottomContainer: {
     position: 'absolute',
